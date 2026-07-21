@@ -1337,3 +1337,28 @@ func.func public @merge_const_var(%q0: !quantum.bit, %0: f64) {
     func.return
 }
 
+// -----
+
+// An unconditional rotation before an scf.if must NOT be merged into a
+// rotation inside one of the branches: the outer rotation executes on all
+// paths while the inner one is conditional.
+// CHECK-LABEL: test_no_merge_across_if_boundary
+func.func @test_no_merge_across_if_boundary(%cond: i1, %a: f64, %b: f64) -> !quantum.bit {
+    %0 = quantum.alloc( 1) : !quantum.reg
+    %1 = quantum.extract %0[ 0] : !quantum.reg -> !quantum.bit
+    // CHECK: [[outer:%.+]] = quantum.custom "RX"(%arg1) %1
+    %2 = quantum.custom "RX"(%a) %1 : !quantum.bit
+    // CHECK-NOT: arith.addf
+    // CHECK: scf.if
+    %3 = scf.if %cond -> (!quantum.bit) {
+        // CHECK: scf.yield [[outer]]
+        scf.yield %2 : !quantum.bit
+    } else {
+        // CHECK: [[inner:%.+]] = quantum.custom "RX"(%arg2) [[outer]]
+        // CHECK: scf.yield [[inner]]
+        %4 = quantum.custom "RX"(%b) %2 : !quantum.bit
+        scf.yield %4 : !quantum.bit
+    }
+    return %3 : !quantum.bit
+}
+

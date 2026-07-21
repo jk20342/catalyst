@@ -705,3 +705,28 @@ func.func @test_loop_boundary_rotation(%q0: !quantum.bit, %q1: !quantum.bit) -> 
     // CHECK: return [[scf]]#0, [[qubit_6]]
     func.return %scf#0, %scf#1 : !quantum.bit, !quantum.bit
 }
+
+// -----
+
+// An unconditional gate before an scf.if must NOT be cancelled against a gate
+// inside one of the branches: the outer gate executes on all paths while the
+// inner one is conditional, so removing the pair would corrupt the state on
+// the paths where the inner gate does not run.
+// CHECK-LABEL: test_no_cancel_across_if_boundary
+func.func @test_no_cancel_across_if_boundary(%cond: i1) -> !quantum.bit {
+    %0 = quantum.alloc( 1) : !quantum.reg
+    %1 = quantum.extract %0[ 0] : !quantum.reg -> !quantum.bit
+    // CHECK: [[outer:%.+]] = quantum.custom "Hadamard"() %1
+    %2 = quantum.custom "Hadamard"() %1 : !quantum.bit
+    // CHECK: scf.if
+    %3 = scf.if %cond -> (!quantum.bit) {
+        // CHECK: scf.yield [[outer]]
+        scf.yield %2 : !quantum.bit
+    } else {
+        // CHECK: [[inner:%.+]] = quantum.custom "Hadamard"() [[outer]]
+        // CHECK: scf.yield [[inner]]
+        %4 = quantum.custom "Hadamard"() %2 : !quantum.bit
+        scf.yield %4 : !quantum.bit
+    }
+    return %3 : !quantum.bit
+}

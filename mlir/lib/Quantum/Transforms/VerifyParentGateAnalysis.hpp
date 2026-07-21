@@ -100,6 +100,15 @@ template <typename OpType, typename ParentOpType> class VerifyHeterogeneousParen
             return false;
         }
 
+        // Both gates must be in the same block: a parent gate outside the current
+        // region (e.g. before an scf.if or scf.for containing this gate) executes
+        // unconditionally at runtime, so cancelling or merging only this copy would
+        // change the semantics of the other execution paths. Cross-boundary pairs
+        // are handled by the control-flow boundary optimization passes instead.
+        if (op->getBlock() != parentOp->getBlock()) {
+            return false;
+        }
+
         return true;
     }
 
